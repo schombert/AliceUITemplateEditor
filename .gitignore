@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 
 .ninja_log
+imgui.ini
