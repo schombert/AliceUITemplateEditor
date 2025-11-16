@@ -672,7 +672,7 @@ void make_affine_transform_description(template_project::affine_transform& tf, c
 
 	int32_t combo_selection = int32_t(tf.dimension);
 	const char* new_template_options[] = { "height", "width", "smallest dimension", "largest dimension", "diagonal" };
-	if(ImGui::Combo("Base value", &combo_selection, new_template_options, 6)) {
+	if(ImGui::Combo("Base value", &combo_selection, new_template_options, 5)) {
 		tf.dimension = template_project::dimension_relative(combo_selection);
 	}
 	ImGui::InputFloat("Multiplier", &tf.scale);
@@ -694,7 +694,46 @@ void make_icon_region_description(template_project::icon_region_template& tt, ch
 	ImGui::Unindent(20.0f);
 	ImGui::PopID();
 }
+void make_color_region_description(template_project::color_region& tt, char const* label, template_project::project& current_theme) {
+	ImGui::PushID((void*)&tt);
+	ImGui::Text(label);
+	ImGui::Indent(20.0f);
+	make_background_combo_box(tt.bg, "Background", current_theme);
+	make_color_combo_box(tt.color, "Text color", current_theme);
+	ImGui::Unindent(20.0f);
+	ImGui::PopID();
+}
+void make_toggle_region_description(template_project::toggle_region& tt, char const* label, template_project::project& current_theme) {
+	ImGui::PushID((void*)&tt);
+	ImGui::Text(label);
+	ImGui::Indent(20.0f);
+	make_color_region_description(tt.primary, "Primary appearance", current_theme);
+	make_color_region_description(tt.active, "Active appearance", current_theme);
+	make_color_region_description(tt.disabled, "Disabled appearance", current_theme);
+	make_font_combo_box(tt.font_choice, "Text font", current_theme);
+	ImGui::InputFloat("Text scale", &tt.font_scale);
+	{
+		int32_t combo_selection = int32_t(tt.h_text_alignment);
+		const char* new_template_options[] = { "left", "right", "center" };
+		if(ImGui::Combo("H. text alignment", &combo_selection, new_template_options, 3)) {
+			tt.h_text_alignment = template_project::aui_text_alignment(combo_selection);
+		}
+	}
+	{
+		int32_t combo_selection = int32_t(tt.v_text_alignment);
+		const char* new_template_options[] = { "top", "bottom", "center" };
+		if(ImGui::Combo("V. text alignment", &combo_selection, new_template_options, 3)) {
+			tt.v_text_alignment = template_project::aui_text_alignment(combo_selection);
+		}
+	}
+	make_affine_transform_description(tt.text_margin_left, "Text left margin", current_theme);
+	make_affine_transform_description(tt.text_margin_right, "Text right margin", current_theme);
+	make_affine_transform_description(tt.text_margin_top, "Text top margin", current_theme);
+	make_affine_transform_description(tt.text_margin_bottom, "Text bottom margin", current_theme);
 
+	ImGui::Unindent(20.0f);
+	ImGui::PopID();
+}
 void make_mixed_region_description(template_project::mixed_region_template& tt, char const* label, template_project::project& current_theme) {
 	ImGui::PushID((void*)&tt);
 	ImGui::Text(label);
@@ -1197,6 +1236,36 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int n
 			}
 			ImGui::TreePop();
 		}
+		if(ImGui::TreeNodeEx("Toggle button templates", base_tree_flags)) {
+			for(auto& i : thm.toggle_button_t) {
+				auto flags = base_tree_flags | (selected_type == template_project::template_type::toggle_button && selected_template == int32_t(std::distance(thm.toggle_button_t.data(), &i)) ? ImGuiTreeNodeFlags_Selected : 0);
+				if(ImGui::TreeNodeEx(i.display_name.c_str(), flags)) {
+					if(ImGui::IsItemClicked()) {
+						selected_type = template_project::template_type::toggle_button;
+						selected_template = int32_t(std::distance(thm.toggle_button_t.data(), &i));
+					}
+
+					make_name_change(i.temp_display_name, i.display_name, thm.toggle_button_t);
+
+					make_toggle_region_description(i.on_region, "On apperance", thm);
+					make_toggle_region_description(i.off_region, "Off apperance", thm);
+
+					ImGui::Checkbox("Animate active transition", &i.animate_active_transition);
+
+					ImGui::TreePop();
+				}
+			}
+			if(ImGui::Button("Add toggle button")) {
+				thm.toggle_button_t.emplace_back();
+				thm.toggle_button_t.back().display_name = "new toggle button";
+			}
+			if(!thm.toggle_button_t.empty()) {
+				if(ImGui::Button("Delete toggle button")) {
+					thm.toggle_button_t.pop_back();
+				}
+			}
+			ImGui::TreePop();
+		}
 		if(ImGui::TreeNodeEx("Progress bar templates", base_tree_flags)) {
 			for(auto& i : thm.progress_bar_t) {
 				auto flags = base_tree_flags | (selected_type == template_project::template_type::progress_bar && selected_template == int32_t(std::distance(thm.progress_bar_t.data(), &i)) ? ImGuiTreeNodeFlags_Selected : 0);
@@ -1633,6 +1702,90 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int n
 									std::max(1, int32_t((b - t))));
 							}
 						}
+					}
+					break;
+				case template_project::template_type::toggle_button:
+					if(0 <= selected_template && selected_template < int32_t(thm.toggle_button_t.size())) {
+						int32_t hcursor = 0;
+						int32_t vcursor = 0;
+						int32_t next_line = 0;
+						if(thm.toggle_button_t[selected_template].on_region.primary.bg != -1) {
+							auto l = thm.toggle_button_t[selected_template].on_region.text_margin_left.resolve(float(16 * 8), float(2 * 8), 8.0f);
+							auto t = thm.toggle_button_t[selected_template].on_region.text_margin_top.resolve(float(16 * 8), float(2 * 8), 8.0f);
+							auto r = thm.toggle_button_t[selected_template].on_region.text_margin_right.resolve(float(16 * 8), float(2 * 8), 8.0f);
+							auto b = thm.toggle_button_t[selected_template].on_region.text_margin_bottom.resolve(float(16 * 8), float(2 * 8), 8.0f);
+
+							render_asvg_rect(thm.backgrounds[thm.toggle_button_t[selected_template].on_region.primary.bg].renders, hcursor, vcursor, next_line, 16, 2, 8);
+
+							if(0 <= thm.toggle_button_t[selected_template].on_region.primary.color && thm.toggle_button_t[selected_template].on_region.primary.color < int32_t(thm.colors.size())) {
+								render_hollow_rect(
+									color3f{
+										thm.colors[thm.toggle_button_t[selected_template].on_region.primary.color].r,
+										thm.colors[thm.toggle_button_t[selected_template].on_region.primary.color].g,
+										thm.colors[thm.toggle_button_t[selected_template].on_region.primary.color].b },
+										drag_offset_x + 0 + l * ui_scale,
+										drag_offset_y + vcursor + t * ui_scale,
+										std::max(1, int32_t((float(16 * 8) - (r + l))* ui_scale)),
+										std::max(1, int32_t((float(2 * 8) - (t + b))* ui_scale)));
+							} else {
+								render_hollow_rect(color3f{ 1.f, 0.f, 0.f },
+									drag_offset_x + 0 + l * ui_scale,
+									drag_offset_y + vcursor + t * ui_scale,
+									std::max(1, int32_t((float(16 * 8) - (r + l))* ui_scale)),
+									std::max(1, int32_t((float(2 * 8) - (t + b))* ui_scale)));
+							}
+						}
+						vcursor = next_line;
+						hcursor = 0;
+						if(thm.toggle_button_t[selected_template].on_region.active.bg != -1) {
+							render_asvg_rect(thm.backgrounds[thm.toggle_button_t[selected_template].on_region.active.bg].renders, hcursor, vcursor, next_line, 16, 2, 8);
+						}
+						vcursor = next_line;
+						hcursor = 0;
+						if(thm.toggle_button_t[selected_template].on_region.disabled.bg != -1) {
+							render_asvg_rect(thm.backgrounds[thm.toggle_button_t[selected_template].on_region.disabled.bg].renders, hcursor, vcursor, next_line, 16, 2, 8);
+						}
+						vcursor = next_line;
+						hcursor = 0;
+
+						if(thm.toggle_button_t[selected_template].off_region.primary.bg != -1) {
+							auto l = thm.toggle_button_t[selected_template].off_region.text_margin_left.resolve(float(16 * 8), float(2 * 8), 8.0f);
+							auto t = thm.toggle_button_t[selected_template].off_region.text_margin_top.resolve(float(16 * 8), float(2 * 8), 8.0f);
+							auto r = thm.toggle_button_t[selected_template].off_region.text_margin_right.resolve(float(16 * 8), float(2 * 8), 8.0f);
+							auto b = thm.toggle_button_t[selected_template].off_region.text_margin_bottom.resolve(float(16 * 8), float(2 * 8), 8.0f);
+
+							render_asvg_rect(thm.backgrounds[thm.toggle_button_t[selected_template].off_region.primary.bg].renders, hcursor, vcursor, next_line, 16, 2, 8);
+
+							if(0 <= thm.toggle_button_t[selected_template].off_region.primary.color && thm.toggle_button_t[selected_template].off_region.primary.color < int32_t(thm.colors.size())) {
+								render_hollow_rect(
+									color3f{
+										thm.colors[thm.toggle_button_t[selected_template].off_region.primary.color].r,
+										thm.colors[thm.toggle_button_t[selected_template].off_region.primary.color].g,
+										thm.colors[thm.toggle_button_t[selected_template].off_region.primary.color].b },
+										drag_offset_x + 0 + l * ui_scale,
+										drag_offset_y + vcursor + t * ui_scale,
+										std::max(1, int32_t((float(16 * 8) - (r + l))* ui_scale)),
+										std::max(1, int32_t((float(2 * 8) - (t + b))* ui_scale)));
+							} else {
+								render_hollow_rect(color3f{ 1.f, 0.f, 0.f },
+									drag_offset_x + 0 + l * ui_scale,
+									drag_offset_y + vcursor + t * ui_scale,
+									std::max(1, int32_t((float(16 * 8) - (r + l))* ui_scale)),
+									std::max(1, int32_t((float(2 * 8) - (t + b))* ui_scale)));
+							}
+						}
+						vcursor = next_line;
+						hcursor = 0;
+						if(thm.toggle_button_t[selected_template].off_region.active.bg != -1) {
+							render_asvg_rect(thm.backgrounds[thm.toggle_button_t[selected_template].off_region.active.bg].renders, hcursor, vcursor, next_line, 16, 2, 8);
+						}
+						vcursor = next_line;
+						hcursor = 0;
+						if(thm.toggle_button_t[selected_template].off_region.disabled.bg != -1) {
+							render_asvg_rect(thm.backgrounds[thm.toggle_button_t[selected_template].off_region.disabled.bg].renders, hcursor, vcursor, next_line, 16, 2, 8);
+						}
+						vcursor = next_line;
+						hcursor = 0;
 					}
 					break;
 				case template_project::template_type::label:
